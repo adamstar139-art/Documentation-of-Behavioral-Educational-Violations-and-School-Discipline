@@ -4,12 +4,16 @@ import sqlite3
 import tempfile
 import textwrap
 import urllib.parse
+import json
 from datetime import datetime
 import pandas as pd
 import psycopg2
 import streamlit as st
 import streamlit.components.v1 as components
 
+# ==========================================
+# 0. Global State & Helper Functions
+# ==========================================
 DEFAULT_STUDENT_PHONES_MAP = {}
 
 def render_clean_html(html_str):
@@ -17,10 +21,9 @@ def render_clean_html(html_str):
     clean = "\n".join([line.strip() for line in html_str.splitlines() if line.strip()])
     st.markdown(clean, unsafe_allow_html=True)
 
-
-##### ==========================================
-##### 1. Page Configuration & Custom Styling (RTL & Clean Print)
-##### ==========================================
+# ==========================================
+# 1. Page Configuration & Custom Styling (RTL & Clean Print)
+# ==========================================
 st.set_page_config(
     page_title="تدوين المخالفات السلوكية والتعليمية والانضباط المدرسي - متوسطة الثغر النموذجية الأهلية",
     page_icon="🏫",
@@ -28,84 +31,127 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-##### Global CSS Rules for RTL and Professional Styling
+# Global CSS Rules for RTL and Professional Styling
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
-html, body, [class*="css"], div, p, span, h1, h2, h3, h4, h5, h6, input, button, select, textarea {
-    font-family: 'Tajawal', sans-serif !important;
-    direction: rtl;
-    text-align: right;
-}
-.stApp {
-    background-color: #f8fafc;
-}
-.main .block-container {
-    padding-top: 2rem;
-    padding-bottom: 3rem;
-    max-width: 1200px;
-}
-.incident-box {
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 16px 20px;
-    background-color: #ffffff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    margin-bottom: 15px;
-    border-right: 5px solid #1e3c72;
-}
-.incident-title {
-    font-size: 16px;
-    font-weight: bold;
-    color: #1e3c72;
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.badge-deg-1 { background-color: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-.badge-deg-2 { background-color: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-.badge-deg-3 { background-color: #ffedd5; color: #c2410c; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-.badge-deg-4 { background-color: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-.badge-deg-5 { background-color: #f3e8ff; color: #6b21a8; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-}
-.info-item {
-    background-color: #f8fafc;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    border: 1px solid #f1f5f9;
-}
-.info-label { font-weight: bold; color: #64748b; display: block; font-size: 11px; margin-bottom: 2px; }
-.info-value { color: #1e293b; font-weight: 600; }
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+    
+    html, body, [class*="css"], .stApp {
+        font-family: 'Tajawal', sans-serif !important;
+        direction: rtl !important;
+        text-align: right !important;
+    }
+    
+    .stApp {
+        background-color: #f8fafc;
+    }
+    
+    /* Header Banner Styling */
+    .main-header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 20px 25px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(30, 60, 114, 0.2);
+        text-align: center;
+    }
+    .main-header h1 {
+        color: #ffffff !important;
+        font-size: 26px !important;
+        font-weight: 800 !important;
+        margin: 0 0 8px 0 !important;
+    }
+    .main-header p {
+        color: #e2e8f0 !important;
+        font-size: 15px !important;
+        margin: 0 !important;
+    }
+    
+    /* Incident Card Box */
+    .incident-box {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-right: 5px solid #ef4444;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .incident-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .info-item {
+        background: #f8fafc;
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid #f1f5f9;
+        font-size: 13.5px;
+    }
+    .info-label {
+        font-weight: bold;
+        color: #475569;
+        display: block;
+        margin-bottom: 3px;
+    }
+    .info-value {
+        color: #0f172a;
+    }
+    
+    /* Badges */
+    .badge-deg-1 { background-color: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .badge-deg-2 { background-color: #ffedd5; color: #c2410c; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .badge-deg-3 { background-color: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .badge-deg-4 { background-color: #fce7f3; color: #be185d; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .badge-deg-5 { background-color: #f3e8ff; color: #6b21a8; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    
+    /* Sidebar RTL fix */
+    section[data-testid="stSidebar"] {
+        direction: rtl !important;
+        text-align: right !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-##### Main Top Header Banner
+# Main Top Header Banner
 st.markdown("""
-<div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 22px 25px; border-radius: 12px; color: white; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(30,60,114,0.15); text-align: center;">
-    <h2 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 800;">🏫 نظام تدوين المخالفات السلوكية والانضباط المدرسي</h2>
-    <p style="margin: 6px 0 0 0; color: #e2e8f0; font-size: 14px;">متوسطة الثغر النموذجية الأهلية - الإشراف والمتابعة اليومية</p>
+<div class="main-header">
+    <h1>🏫 نظام تدوين المخالفات السلوكية والتعليمية والانضباط المدرسي</h1>
+    <p>متوسطة الثغر النموذجية الأهلية - إدارة التعليم بمنطقة الرياض</p>
 </div>
 """, unsafe_allow_html=True)
-##### ==========================================
-##### 2. Database Setup & Helper Functions (Supabase / PostgreSQL - Permanent Storage)
-##### ==========================================
+
+# ==========================================
+# 2. Database Connection Wrapper & SQL Translator for PostgreSQL/Supabase
+# ==========================================
 def _translate(sql):
-    """ترجمة صياغة SQLite إلى صياغة PostgreSQL تلقائياً دون المساس ببقية الكود"""
-    sql = sql.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
-    sql = re.sub(r'\bDATETIME\b', 'TIMESTAMP', sql)
-    if 'INSERT OR IGNORE' in sql:
-        sql = sql.replace('INSERT OR IGNORE', 'INSERT')
-        if 'ON CONFLICT' not in sql:
-            sql = sql.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
-    sql = sql.replace('?', '%s')
-    return sql
+    if not isinstance(sql, str):
+        return sql
+    s = sql
+    s = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT', 'SERIAL PRIMARY KEY', s, flags=re.IGNORECASE)
+    s = re.sub(r'DATETIME', 'TIMESTAMP', s, flags=re.IGNORECASE)
+    if 'INSERT OR IGNORE INTO teachers' in s:
+        s = s.replace('INSERT OR IGNORE INTO teachers', 'INSERT INTO teachers')
+        s += ' ON CONFLICT (name) DO NOTHING'
+    elif 'INSERT OR IGNORE INTO students' in s:
+        s = s.replace('INSERT OR IGNORE INTO students', 'INSERT INTO students')
+        s += ' ON CONFLICT (id) DO NOTHING'
+    else:
+        s = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', s, flags=re.IGNORECASE)
+    s = s.replace('?', '%s')
+    return s
 
 class _CursorWrapper:
     def __init__(self, cur):
@@ -113,7 +159,12 @@ class _CursorWrapper:
     def execute(self, sql, params=None):
         return self._cur.execute(_translate(sql), params if params is not None else None)
     def executemany(self, sql, seq):
-        return self._cur.executemany(_translate(sql), seq)
+        translated_sql = _translate(sql)
+        return self._cur.executemany(translated_sql, seq)
+    def fetchone(self):
+        return self._cur.fetchone()
+    def fetchall(self):
+        return self._cur.fetchall()
     def __getattr__(self, name):
         return getattr(self._cur, name)
 
@@ -122,6 +173,10 @@ class _ConnWrapper:
         self._conn = conn
     def cursor(self):
         return _CursorWrapper(self._conn.cursor())
+    def commit(self):
+        return self._conn.commit()
+    def close(self):
+        return self._conn.close()
     def __getattr__(self, name):
         return getattr(self._conn, name)
 
@@ -136,21 +191,24 @@ def read_sql(sql, con, params=None):
     cur = con.cursor()
     cur.execute(sql, list(params) if params is not None else None)
     rows = cur.fetchall()
-    cols = [d[0] for d in cur.description]
+    cols = [d[0] for d in cur.description] if cur.description else []
     cur.close()
     return pd.DataFrame(rows, columns=cols)
 
-# جعل كل استدعاءات pd.read_sql_query الموجودة تعمل تلقائياً دون تعديلها
 pd.read_sql_query = read_sql
 
+# ==========================================
+# 3. Cached Database Initialization & Seeding
+# ==========================================
+@st.cache_resource
 def init_db():
-    """Ensure database tables exist and seed default teachers and 167 students."""
+    """Ensure database tables exist and seed default teachers and 167 students once."""
     conn = get_connection()
     c = conn.cursor()
 
     c.execute('''
     CREATE TABLE IF NOT EXISTS teachers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT UNIQUE NOT NULL
     )
     ''')
@@ -167,13 +225,12 @@ def init_db():
 
     try:
         c.execute("ALTER TABLE students ADD COLUMN phone TEXT")
-        conn.commit()
     except Exception:
         pass
 
     c.execute('''
     CREATE TABLE IF NOT EXISTS incidents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         teacher_name TEXT NOT NULL,
         student_id TEXT NOT NULL,
         student_name TEXT NOT NULL,
@@ -186,12 +243,10 @@ def init_db():
         action_taken TEXT,
         vice_notes TEXT,
         status TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP
     )
     ''')
-
-    conn.commit()
 
     default_teachers = [
         "محمد سامي السعيد", "علي محمد معوض", "أحمد عبد الحميد سعيد",
@@ -375,7 +430,6 @@ def init_db():
     ]
     c.executemany("INSERT OR IGNORE INTO students (id, name, grade, section, phone) VALUES (?, ?, ?, ?, ?)", default_students)
 
-    # Force update phone for existing records where phone IS NULL or empty
     for st_item in default_students:
         sid, sname, sgrade, ssec, sphone = st_item
         if sphone:
@@ -385,24 +439,43 @@ def init_db():
                 WHERE (id = ? OR name = ?) AND (phone IS NULL OR phone = '' OR phone = 'None')
             """, (sphone, sid, sname))
 
-            # Populate global fallback map
-            if 'DEFAULT_STUDENT_PHONES_MAP' in globals():
-                DEFAULT_STUDENT_PHONES_MAP[str(sid).strip()] = str(sphone).strip()
-                DEFAULT_STUDENT_PHONES_MAP[str(sname).strip()] = str(sphone).strip()
+            DEFAULT_STUDENT_PHONES_MAP[str(sid).strip()] = str(sphone).strip()
+            DEFAULT_STUDENT_PHONES_MAP[str(sname).strip()] = str(sphone).strip()
 
-    conn.commit()
     conn.close()
+    return True
 
+# Initialize database tables once
 init_db()
+
+# ==========================================
+# 4. Optimized Data Fetchers & Helpers
+# ==========================================
+@st.cache_data(ttl=600)
 def fetch_teachers():
-    init_db()
     conn = get_connection()
     df = pd.read_sql_query("SELECT name FROM teachers ORDER BY name", conn)
     conn.close()
     return df['name'].tolist()
 
+@st.cache_data(ttl=300)
+def fetch_students(grade=None, section=None):
+    conn = get_connection()
+    query = "SELECT id, name, grade, section, phone FROM students WHERE 1=1"
+    params = []
+    if grade:
+        query += " AND grade = ?"
+        params.append(grade)
+    if section:
+        query += " AND section = ?"
+        params.append(section)
+    query += " ORDER BY name"
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+    return df
+
 def get_student_phone(student_id_or_name=None, student_name=None):
-    """استدعاء رقم جوال ولي الأمر المعتمد تلقائياً من قاعدة البيانات باستعمال هوية الطالب أو اسمه مع نظام استعادة البيانات المضمونة"""
+    """استدعاء رقم جوال ولي الأمر المعتمد تلقائياً من قاعدة البيانات باستعمال هوية الطالب أو اسمه"""
     sid = str(student_id_or_name).strip() if student_id_or_name else ""
     sname = str(student_name).strip() if student_name else ""
 
@@ -436,7 +509,7 @@ def get_student_phone(student_id_or_name=None, student_name=None):
         if row and row[0] and str(row[0]).strip() and str(row[0]).strip() != "None":
             phone = str(row[0]).strip()
 
-    # 4. Dictionary Fallback (100% Guarantee)
+    # 4. Dictionary Fallback
     if not phone:
         if sid in DEFAULT_STUDENT_PHONES_MAP:
             phone = DEFAULT_STUDENT_PHONES_MAP[sid]
@@ -445,7 +518,6 @@ def get_student_phone(student_id_or_name=None, student_name=None):
 
         if phone:
             c.execute("UPDATE students SET phone = ? WHERE id = ? OR name = ?", (phone, sid, sname))
-            conn.commit()
 
     conn.close()
     return phone
@@ -459,8 +531,8 @@ def update_student_phone(student_id_or_name, new_phone):
     val = str(student_id_or_name).strip()
     p_val = str(new_phone).strip()
     c.execute("UPDATE students SET phone = ? WHERE id = ? OR TRIM(id) = ? OR name = ? OR TRIM(name) = ?", (p_val, val, val, val, val))
-    conn.commit()
     conn.close()
+    st.cache_data.clear()
     return True
 
 def generate_whatsapp_link(phone_num, rep_id, student_name, grade, section, teacher_name, created_at, incident_degree, incident_type, description, action_taken, vice_notes):
@@ -475,20 +547,18 @@ def generate_whatsapp_link(phone_num, rep_id, student_name, grade, section, teac
 
     msg = f"""*تقرير مخالفة سلوكية - متوسطة الثغر النموذجية الأهلية* 🏫
 
---------------------------------------------------------------------------------
+📌  *رقم التقرير:*  #{rep_id}
+👤  *اسم الطالب:*  {student_name}
+🏫  *الصف والفصل:*  {grade} - {section}
+👨‍🏫  *المعلم الراصد:*  {teacher_name}
+📅  *تاريخ الرصد:*  {created_at}
 
-📌 *رقم التقرير:* #{rep_id}
-👤 *اسم الطالب:* {student_name}
-🏫 *الصف والفصل:* {grade} - {section}
-👨‍🏫 *المعلم الراصد:* {teacher_name}
-📅 *تاريخ الرصد:* {created_at}
+⚠️  *درجة المخالفة:*  {incident_degree}
+📝  *نوع المخالفة:*  {incident_type}
+📄  *وصف المشكلة:*  {description}
 
-⚠️ *درجة المخالفة:* {incident_degree}
-📝 *نوع المخالفة:* {incident_type}
-📄 *وصف المشكلة:* {description}
-
-⚖️ *الإجراء المتخذ (الوكيل):* {action_str}
-💬 *ملاحظات الوكيل:* {notes_str}
+⚖️  *الإجراء المتخذ (الوكيل):*  {action_str}
+💬  *ملاحظات الوكيل:*  {notes_str}
 
 *إدارة متوسطة الثغر النموذجية الأهلية*"""
     encoded_msg = urllib.parse.quote(msg)
@@ -497,35 +567,14 @@ def generate_whatsapp_link(phone_num, rep_id, student_name, grade, section, teac
     else:
         return f"https://wa.me/?text={encoded_msg}"
 
-def fetch_students(grade=None, section=None):
-    init_db()
-    conn = get_connection()
-    query = "SELECT id, name, grade, section, phone FROM students WHERE 1=1"
-    params = []
-    if grade:
-        query += " AND grade = ?"
-        params.append(grade)
-    if section:
-        query += " AND section = ?"
-        params.append(section)
-    query += " ORDER BY name"
-    df = pd.read_sql_query(query, conn, params=params)
-
-    if df.empty:
-        init_db()
-        conn2 = get_connection()
-        df = pd.read_sql_query(query, conn2, params=params)
-        conn2.close()
-
-    conn.close()
-    return df
-
-##### Initialize Session State for Authentication
+# ==========================================
+# 5. Session State & Rules Data
+# ==========================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'print_authenticated' not in st.session_state:
     st.session_state.print_authenticated = False
-##### Violations & Procedures Data
+
 VIOLATION_RULES = {
     "الدرجة الأولى (المخالفات البسيطة)": [
         "عدم الالتزام بالزي المدرسي أو المظهر العام",
@@ -533,8 +582,8 @@ VIOLATION_RULES = {
         "النوم داخل الفصل أو أثناء النشاط المدرسي",
         "استخدام الهاتف المحمول دون إذن داخل الصف",
         "تناول الأطعمة أو المشروبات داخل الفصل أثناء الشرح",
-         "عدم احضار قلم أو دفتر والأمتناع عن الكتابة",
-         "الكلام الجانبي مع زملائة أثناء الشرح",
+        "عدم احضار قلم أو دفتر والأمتناع عن الكتابة",
+        "الكلام الجانبي مع زملائة أثناء الشرح",
     ],
     "الدرجة الثانية (المخالفات متوسطة الشدة)": [
         "الهروب من الفصل أو عدم حضور بعض الحصص",
@@ -597,6 +646,7 @@ PROCEDURES_BY_DEGREE = {
         "تحويل القضية للجهات الأمنية المختصة إذا لزم الأمر"
     ]
 }
+
 def render_bulk_notification_section():
     st.subheader("📢 إرسال إشعارات ورسائل جماعية لأولياء الأمور")
     st.info("💡 تتيح هذه الشاشة للوكيل أو المدير كتابة رسالة نصية جماعية وتحديد الفئة المستهدفة ثم إرسالها فوراً لأولياء الأمور عبر الواتساب.")
@@ -639,7 +689,6 @@ def render_bulk_notification_section():
     if not target_students_df.empty:
         st.success(f"📊 عدد أولياء الأمور المستهدفين بالفلاتر المختارة: ({len(target_students_df)}) ولي أمر")
 
-        # Extract phone numbers list
         phones_list = [str(p).strip() for p in target_students_df['phone'].dropna().tolist() if str(p).strip()]
         formatted_phones = []
         for p in phones_list:
@@ -651,7 +700,6 @@ def render_bulk_notification_section():
             if cp:
                 formatted_phones.append(cp)
 
-        # Mass Send Action Buttons Section
         target_wa_items = []
         for idx, st_row in target_students_df.iterrows():
             p_num = st_row['phone'] if st_row['phone'] else ''
@@ -679,7 +727,6 @@ def render_bulk_notification_section():
             st.link_button("📲 📢 إرسال لمجموعة بث عامة (WhatsApp Broadcast)", wa_general_broadcast_url, use_container_width=True)
 
         with col_btn_m2:
-            import json
             js_json = json.dumps(target_wa_items, ensure_ascii=False)
             js_script = f"""
             <div style="direction: rtl; text-align: center;">
@@ -757,9 +804,10 @@ def render_bulk_notification_section():
                 st.link_button("📲 إرسال عبر الواتساب", single_wa_url, use_container_width=True)
     else:
         st.warning("⚠️ لا يوجد طلاب مطابقون للتصفية المختارة.")
-##### ==========================================
-##### 3. Sidebar Navigation & Login Handling
-##### ==========================================
+
+# ==========================================
+# 6. Sidebar Navigation & Login Handling
+# ==========================================
 st.sidebar.title("📌 القائمة الرئيسية")
 page = st.sidebar.radio(
     "اختر الشاشة المطلوب الانتقال إليها:",
@@ -782,14 +830,13 @@ PROTECTED_PAGES = [
     "🖨️ طباعة وتصدير التقرير"
 ]
 
-##### Global Sidebar Authentication Check for All Protected Pages
 if page in PROTECTED_PAGES:
     if not st.session_state.authenticated:
         st.sidebar.markdown("---")
         st.sidebar.subheader("🔒 تسجيل الدخول")
         password_input = st.sidebar.text_input("أدخل كلمة المرور:", type="password", key="pwd_input_side")
         if st.sidebar.button("تسجيل الدخول", key="btn_login_side"):
-            if password_input == "9009":
+            if password_input in ["9009", "987000"]:
                 st.session_state.authenticated = True
                 st.sidebar.success("تم تسجيل الدخول بنجاح!")
                 st.rerun()
@@ -800,25 +847,23 @@ if page in PROTECTED_PAGES:
             st.session_state.authenticated = False
             st.rerun()
 
-##### ==========================================
-##### GLOBAL PROTECTED PAGES LOGIN ENFORCEMENT
-##### ==========================================
+# Global Protected Pages Login Check
 if page in PROTECTED_PAGES and not st.session_state.authenticated:
     st.error("🔒 هذه الشاشة محمية بكلمة مرور. يرجى إدخال كلمة المرور الصحيحة لتسجيل الدخول.")
     with st.form("global_main_login_form"):
         pwd_main = st.text_input("أدخل كلمة المرور:", type="password", key="main_pwd_input_global")
         btn_login_main = st.form_submit_button("🔓 تسجيل الدخول للشاشة")
         if btn_login_main:
-            if pwd_main == "987000":
+            if pwd_main in ["987000", "9009"]:
                 st.session_state.authenticated = True
                 st.success("تم تسجيل الدخول بنجاح!")
                 st.rerun()
             else:
                 st.error("❌ كلمة المرور غير صحيحة!")
 
-##### ==========================================
-##### PAGE 1: Teacher Screen
-##### ==========================================
+# ==========================================
+# PAGE 1: Teacher Screen
+# ==========================================
 elif page == "👨‍🏫 شاشة المعلم (رصد مخالفة)":
     st.subheader("📋 شاشة المعلم - رصد المخالفة السلوكية")
     st.info("💡 اختر الصف والفصل لتحديث قائمة الطلاب المنسدلة تلقائياً.")
@@ -866,16 +911,15 @@ elif page == "👨‍🏫 شاشة المعلم (رصد مخالفة)":
             (teacher_name, student_id, student_name, grade, section, period, incident_degree, incident_type, description, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (selected_teacher, student_id, student_name, selected_grade, selected_section, selected_period, selected_degree, selected_violation, description.strip(), 'معلقة (بانتظار الإجراء)'))
-            conn.commit()
             conn.close()
             st.success("✅ تم إرسال البلاغ بنجاح وتوثيقه في قاعدة البيانات لوكيل شؤون الطلاب!")
-##### ==========================================
-##### PAGE 2: Vice Principal Screen (PROFESSIONAL RTL CARD FORMAT)
-##### ==========================================
+
+# ==========================================
+# PAGE 2: Vice Principal Screen
+# ==========================================
 elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
     st.subheader("👨‍💼 شاشة وكيل شؤون الطلاب - معالجة البلاغات واتخاذ الإجراءات")
 
-    init_db()
     conn = get_connection()
     incidents_df = pd.read_sql_query("SELECT * FROM incidents ORDER BY id DESC", conn)
     conn.close()
@@ -906,7 +950,6 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
 
                     expander_title = f"🚨 بلاغ رقم #{row['id']} - الطالب: {row['student_name']} ({row['grade']} - {row['section']})"
                     with st.expander(expander_title, expanded=True):
-                        # Professional HTML RTL Card Display
                         card_html = f"""
                         <div class="incident-box">
                             <div class="incident-title">
@@ -965,7 +1008,6 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
                                 SET action_taken = ?, vice_notes = ?, status = 'تم اتخاذ الإجراء', updated_at = CURRENT_TIMESTAMP
                                 WHERE id = ?
                                 ''', (selected_proc, vice_notes, row['id']))
-                                conn.commit()
                                 conn.close()
                                 st.success("✅ تم اعتماد الإجراء بنجاح وتحديث حالة التقرير!")
                                 st.rerun()
@@ -973,11 +1015,9 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
                         st.markdown("---")
                         st.markdown("#### 📱 التواصل مع ولي الأمر عبر الواتساب:")
 
-                        # Auto-fetch phone number from students database (checking both ID and Name)
                         st_phone_p = get_student_phone(row['student_id'], row['student_name'])
                         phone_key_p = f"wa_p_phone_{row['id']}"
 
-                        # Set default state if not present or empty
                         if phone_key_p not in st.session_state or not st.session_state[phone_key_p]:
                             st.session_state[phone_key_p] = st_phone_p
 
@@ -1011,10 +1051,10 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
                                 conn = get_connection()
                                 c = conn.cursor()
                                 c.execute("DELETE FROM incidents WHERE id = ?", (row['id'],))
-                                conn.commit()
                                 conn.close()
                                 st.success(f"🗑️ تم حذف البلاغ رقم #{row['id']} بنجاح!")
                                 st.rerun()
+
         with tab2:
             if processed_df.empty:
                 st.info("لا توجد بلاغات معالجة ومكتملة حتى الآن.")
@@ -1070,7 +1110,6 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
 
                         st.markdown("#### 📱 التواصل مع ولي الأمر عبر الواتساب:")
 
-                        # Auto-fetch phone number from students database (checking both ID and Name)
                         st_phone_pr = get_student_phone(row['student_id'], row['student_name'])
                         phone_key_pr = f"wa_pr_phone_{row['id']}"
 
@@ -1107,7 +1146,6 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
                                 conn = get_connection()
                                 c = conn.cursor()
                                 c.execute("DELETE FROM incidents WHERE id = ?", (row['id'],))
-                                conn.commit()
                                 conn.close()
                                 st.success(f"🗑️ تم حذف البلاغ رقم #{row['id']} بنجاح!")
                                 st.rerun()
@@ -1115,15 +1153,15 @@ elif page == "👨‍💼 شاشة وكيل شؤون الطلاب":
         with tab3:
             render_bulk_notification_section()
 
-##### ==========================================
-##### PAGE 2.5: Bulk Notifications Screen
-##### ==========================================
+# ==========================================
+# PAGE 2.5: Bulk Notifications Screen
+# ==========================================
 elif page == "📢 إرسال إشعارات جماعية":
     render_bulk_notification_section()
 
-##### ==========================================
-##### PAGE 3: Student Search
-##### ==========================================
+# ==========================================
+# PAGE 3: Student Search
+# ==========================================
 elif page == "🔍 البحث الشامل عن طالب":
     st.subheader("🔍 البحث الشامل عن سجل طالب سلوكي")
     search_query = st.text_input("أدخل اسم الطالب أو رقم هويته للبحث في القاعدة:")
@@ -1153,9 +1191,10 @@ elif page == "🔍 البحث الشامل عن طالب":
                     st.error(f"⚠️ يوجد عدد ({len(inc_df)}) مخالفة سلوكية مرصودة بحق الطالب:")
                     st.dataframe(inc_df[['id', 'teacher_name', 'period', 'incident_degree', 'incident_type', 'action_taken', 'status', 'created_at']], use_container_width=True)
         conn.close()
-##### ==========================================
-##### PAGE 4: Student Management
-##### ==========================================
+
+# ==========================================
+# PAGE 4: Student Management
+# ==========================================
 elif page == "⚙️ إدارة بيانات الطلاب":
     st.subheader("⚙️ إدارة الطلاب (عرض - إضافة - حذف - نقل)")
     m_tab0, m_tab1, m_tab2, m_tab3 = st.tabs([
@@ -1174,7 +1213,9 @@ elif page == "⚙️ إدارة بيانات الطلاب":
             v_sec = st.selectbox("اختر الفصل:", ["فصل 1", "فصل 2", "فصل 3"], key="v_s")
 
         if st.button("🔄 إدراج واستعادة جميع الطلاب الافتراضيين (167 طالب)", key="reseed_btn"):
+            st.cache_resource.clear()
             init_db()
+            st.cache_data.clear()
             st.success("تمت إعادة تعبئة قاعدة البيانات بجميع الطلاب الـ 167 بنجاح!")
             st.rerun()
 
@@ -1209,7 +1250,7 @@ elif page == "⚙️ إدارة بيانات الطلاب":
                     c = conn.cursor()
                     try:
                         c.execute("INSERT INTO students (id, name, grade, section, phone) VALUES (?, ?, ?, ?, ?)", (new_id.strip(), new_name.strip(), new_grade, new_section, new_phone.strip()))
-                        conn.commit()
+                        st.cache_data.clear()
                         st.success(f"تمت إضافة الطالب ({new_name}) بنجاح!")
                     except Exception:
                         st.error("رقم الطالب/الهوية هذا موجود مسبقاً في قاعدة البيانات!")
@@ -1228,8 +1269,8 @@ elif page == "⚙️ إدارة بيانات الطلاب":
                 conn = get_connection()
                 c = conn.cursor()
                 c.execute("DELETE FROM students WHERE id = ?", (del_id,))
-                conn.commit()
                 conn.close()
+                st.cache_data.clear()
                 st.success(f"تم حذف الطالب ({del_name}) نهائياً من قاعدة البيانات!")
                 st.rerun()
         else:
@@ -1251,15 +1292,16 @@ elif page == "⚙️ إدارة بيانات الطلاب":
                 conn = get_connection()
                 c = conn.cursor()
                 c.execute("UPDATE students SET grade = ?, section = ? WHERE id = ?", (target_grade, target_section, tr_id))
-                conn.commit()
                 conn.close()
+                st.cache_data.clear()
                 st.success(f"تم نقل الطالب ({tr_name}) إلى ({target_grade} - {target_section}) بنجاح!")
                 st.rerun()
         else:
             st.info("لا يوجد طلاب لنقلهم.")
-##### ==========================================
-##### PAGE 5: Printing & Exporting Reports
-##### ==========================================
+
+# ==========================================
+# PAGE 5: Printing & Exporting Reports
+# ==========================================
 elif page == "🖨️ طباعة وتصدير التقرير":
     st.subheader("🖨️ طباعة التقرير الرسمي للمخالفة السلوكية")
 
@@ -1280,7 +1322,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
 
         st.markdown("---")
 
-        # Interactive Direct Print Button & WhatsApp Share Section
         col_print, col_wa = st.columns([1, 1])
 
         with col_print:
@@ -1345,7 +1386,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
                         st.success("✅ تم تحديث رقم ولي الأمر في قاعدة البيانات بنجاح!")
                         st.rerun()
 
-        # Formatted Official Report Template for A4 Print (Without Main Header Banner, Single A4 Page)
         action_str = rep_data['action_taken'] if rep_data['action_taken'] else 'قيد المعالجة والإجراء النظامي'
         notes_str = rep_data['vice_notes'] if rep_data['vice_notes'] else 'لا توجد ملاحظات إضافية'
         report_html = f"""
@@ -1364,7 +1404,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
         </style>
         <div class="a4-print-report" style="direction: rtl; text-align: right; border: 2px solid #1e3c72; padding: 20px 25px; border-radius: 12px; font-family: 'Tajawal', sans-serif; background-color: #ffffff; color: #111; max-width: 820px; margin: 0 auto; box-shadow: 0 4px 15px rgba(0,0,0,0.05); page-break-inside: avoid;">
 
-            <!-- Official Ministry & School Header Grid -->
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3c72; padding-bottom: 12px; margin-bottom: 18px;">
                 <div style="text-align: right; font-size: 13px; line-height: 1.6; color: #222;">
                     <strong>المملكة العربية السعودية</strong><br>
@@ -1383,12 +1422,10 @@ elif page == "🖨️ طباعة وتصدير التقرير":
                 </div>
             </div>
 
-            <!-- Report Main Title Banner -->
             <div style="background: #1e3c72; color: white; text-align: center; padding: 8px 15px; border-radius: 6px; font-size: 18px; font-weight: bold; margin-bottom: 18px;">
                 إشعار مخالفة سلوكية إداري رقم #{rep_data['id']}
             </div>
 
-            <!-- Student & Incident Metadata Table -->
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px;">
                 <tr style="background-color: #f8fafc;">
                     <td style="padding: 9px 12px; border: 1px solid #cbd5e1; font-weight: bold; width: 18%; color: #1e3c72;">اسم الطالب:</td>
@@ -1410,7 +1447,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
                 </tr>
             </table>
 
-            <!-- Section 1: Violation Details -->
             <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 15px; margin-bottom: 16px; background-color: #ffffff;">
                 <div style="font-weight: bold; color: #1e3c72; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; font-size: 15px;">
                     ⚠️ تفاصيل الواقعة والمخالفة السلوكية:
@@ -1424,7 +1460,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
                 </div>
             </div>
 
-            <!-- Section 2: Administrative Action -->
             <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 15px; margin-bottom: 22px; background-color: #ffffff;">
                 <div style="font-weight: bold; color: #1e3c72; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; font-size: 15px;">
                     ⚖️ الإجراء الإداري والتوجيهات (وكيل شؤون الطلاب):
@@ -1437,7 +1472,6 @@ elif page == "🖨️ طباعة وتصدير التقرير":
                 </div>
             </div>
 
-            <!-- Section 3: Official Signatures Block -->
             <div style="margin-top: 25px; padding-top: 15px; border-top: 2px dashed #cbd5e1;">
                 <div style="display: flex; justify-content: space-between; text-align: center; font-size: 14px;">
                     <div style="width: 30%;">
